@@ -50,6 +50,44 @@ sudo apt-get install -y git curl wget python3-pip
 brew install git curl wget python3
 ```
 
+### System Dependencies (Windows)
+1. **Python 3.8+**: Download from [python.org](https://www.python.org/downloads/)
+2. **Git for Windows**: Download from [git-scm.com](https://git-scm.com/download/win)
+3. Ensure Python and Git are added to PATH during installation
+
+---
+
+---
+
+## 💻 Windows Installation
+
+### Method 1: PowerShell Installer (Recommended)
+```powershell
+# Run PowerShell as Administrator
+git clone https://github.com/Z4nzu/hackingtool.git
+cd hackingtool
+powershell -ExecutionPolicy Bypass -File install_windows.ps1
+```
+
+### Method 2: Batch File Installer
+```cmd
+git clone https://github.com/Z4nzu/hackingtool.git
+cd hackingtool
+install_windows.bat
+```
+
+### Method 3: Python Installer
+```cmd
+git clone https://github.com/Z4nzu/hackingtool.git
+cd hackingtool
+python install.py
+```
+
+**Note**: Many tools are designed for Linux and may have limited functionality on Windows. For full compatibility, consider using:
+- **WSL (Windows Subsystem for Linux)** - Recommended
+- **VirtualBox/VMware** with Kali Linux
+- **Docker** (see Docker installation section)
+
 ---
 
 ## 🔧 Manual Installation
