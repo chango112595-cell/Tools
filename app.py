@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 from flask import Flask, render_template, jsonify, request, session
 from flask_socketio import SocketIO, emit
@@ -5,14 +6,21 @@ import subprocess
 import os
 import sys
 import threading
-import pty
-import select
-import termios
-import struct
-import fcntl
 import uuid
+import platform
 from typing import Any, Dict
 from hackingtool import all_tools
+
+# Platform detection
+IS_WINDOWS = platform.system() == 'Windows'
+
+# Conditionally import Unix-specific modules
+if not IS_WINDOWS:
+    import pty
+    import select
+    import termios
+    import struct
+    import fcntl
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'hackingtool-secret-key'
@@ -107,7 +115,13 @@ def install_tool():
         for cmd in install_commands:
             output.append(f"$ {cmd}")
             try:
-                result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+                # Use appropriate shell for Windows
+                shell_flag = True
+                if IS_WINDOWS:
+                    # On Windows, use cmd.exe for better compatibility
+                    result = subprocess.run(cmd, shell=shell_flag, capture_output=True, text=True, timeout=30)
+                else:
+                    result = subprocess.run(cmd, shell=shell_flag, capture_output=True, text=True, timeout=30)
                 output.append(result.stdout if result.stdout else result.stderr)
             except subprocess.TimeoutExpired:
                 output.append("Command timed out after 30 seconds")
@@ -133,6 +147,13 @@ def run_tool_interactive():
     try:
         if category_idx is None or tool_idx is None:
             return jsonify({'success': False, 'error': 'Missing category or tool index'})
+        
+        if IS_WINDOWS:
+            return jsonify({
+                'success': False,
+                'message': 'Interactive terminal mode is not supported on Windows. Many tools are designed for Linux/Unix systems. Consider using WSL (Windows Subsystem for Linux) for full compatibility.',
+                'fallback': True
+            })
         
         tool_collection = all_tools[category_idx]
         tool = tool_collection.TOOLS[tool_idx]
@@ -177,107 +198,113 @@ def run_tool_interactive():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
-def set_winsize(fd, rows, cols):
-    """Set terminal window size"""
-    winsize = struct.pack("HHHH", rows, cols, 0, 0)
-    fcntl.ioctl(fd, termios.TIOCSWINSZ, winsize)
+# Unix-specific terminal functions (only loaded on Linux/macOS)
+if not IS_WINDOWS:
+    def set_winsize(fd, rows, cols):
+        """Set terminal window size"""
+        winsize = struct.pack("HHHH", rows, cols, 0, 0)
+        fcntl.ioctl(fd, termios.TIOCSWINSZ, winsize)
 
-def read_and_forward_pty_output(fd, sid):
-    """Read from PTY and forward to WebSocket"""
-    max_read_bytes = 1024 * 20
-    while True:
-        try:
-            socketio.sleep(0.01)  # type: ignore
-            if sid not in active_sessions:
+    def read_and_forward_pty_output(fd, sid):
+        """Read from PTY and forward to WebSocket"""
+        max_read_bytes = 1024 * 20
+        while True:
+            try:
+                socketio.sleep(0.01)  # type: ignore
+                if sid not in active_sessions:
+                    break
+                timeout_sec = 0
+                (data_ready, _, _) = select.select([fd], [], [], timeout_sec)
+                if data_ready:
+                    output = os.read(fd, max_read_bytes).decode('utf-8', errors='replace')
+                    socketio.emit('terminal_output', {'output': output}, to=sid)  # type: ignore
+            except OSError:
                 break
-            timeout_sec = 0
-            (data_ready, _, _) = select.select([fd], [], [], timeout_sec)
-            if data_ready:
-                output = os.read(fd, max_read_bytes).decode('utf-8', errors='replace')
-                socketio.emit('terminal_output', {'output': output}, to=sid)  # type: ignore
-        except OSError:
-            break
 
-@socketio.on('start_terminal')
-def handle_start_terminal(data):
-    """Start a new terminal session with pre-approved command"""
-    session_id = data.get('session_id')
-    sid = request.sid  # type: ignore
-    
-    # SECURITY: Only execute pre-approved commands
-    if not session_id or session_id not in approved_commands:
-        emit('terminal_error', {'error': 'Invalid or expired session. Please start the tool again.'})
-        return
-    
-    try:
-        # Get the approved command
-        command_data = approved_commands[session_id]
-        command = command_data['command']
+    @socketio.on('start_terminal')
+    def handle_start_terminal(data):
+        """Start a new terminal session with pre-approved command"""
+        session_id = data.get('session_id')
+        sid = request.sid  # type: ignore
         
-        # Remove from approved list (one-time use)
-        del approved_commands[session_id]
+        # SECURITY: Only execute pre-approved commands
+        if not session_id or session_id not in approved_commands:
+            emit('terminal_error', {'error': 'Invalid or expired session. Please start the tool again.'})
+            return
         
-        # Get current working directory (project root)
-        project_root = os.getcwd()
-        
-        # Create PTY
-        (child_pid, fd) = pty.fork()
-        
-        if child_pid == 0:
-            # Child process - stay in project root where tools are
-            os.chdir(project_root)
-            # Execute the command with proper shell handling
-            os.execvp('/bin/bash', ['/bin/bash', '-c', command])
-        else:
-            # Parent process
-            active_sessions[sid] = {
-                'pid': child_pid,
-                'fd': fd
-            }
-            
-            # Set terminal size
-            set_winsize(fd, 24, 80)
-            
-            # Start thread to read PTY output
-            socketio.start_background_task(target=read_and_forward_pty_output, fd=fd, sid=sid)
-            
-            emit('terminal_ready', {'status': 'connected'})
-            
-    except Exception as e:
-        print(f"Terminal error: {str(e)}")
-        emit('terminal_error', {'error': str(e)})
-
-@socketio.on('terminal_input')
-def handle_terminal_input(data):
-    """Handle input from client terminal"""
-    sid = request.sid  # type: ignore
-    if sid in active_sessions:
-        fd = active_sessions[sid]['fd']
         try:
-            os.write(fd, data['input'].encode())
-        except OSError:
-            pass
+            # Get the approved command
+            command_data = approved_commands[session_id]
+            command = command_data['command']
+            
+            # Remove from approved list (one-time use)
+            del approved_commands[session_id]
+            
+            # Get current working directory (project root)
+            project_root = os.getcwd()
+            
+            # Create PTY
+            (child_pid, fd) = pty.fork()
+            
+            if child_pid == 0:
+                # Child process - stay in project root where tools are
+                os.chdir(project_root)
+                # Execute the command with proper shell handling
+                os.execvp('/bin/bash', ['/bin/bash', '-c', command])
+            else:
+                # Parent process
+                active_sessions[sid] = {
+                    'pid': child_pid,
+                    'fd': fd
+                }
+                
+                # Set terminal size
+                set_winsize(fd, 24, 80)
+                
+                # Start thread to read PTY output
+                socketio.start_background_task(target=read_and_forward_pty_output, fd=fd, sid=sid)
+                
+                emit('terminal_ready', {'status': 'connected'})
+                
+        except Exception as e:
+            print(f"Terminal error: {str(e)}")
+            emit('terminal_error', {'error': str(e)})
 
-@socketio.on('terminal_resize')
-def handle_terminal_resize(data):
-    """Handle terminal resize"""
-    sid = request.sid  # type: ignore
-    if sid in active_sessions:
-        fd = active_sessions[sid]['fd']
-        set_winsize(fd, data['rows'], data['cols'])
+    @socketio.on('terminal_input')
+    def handle_terminal_input(data):
+        """Handle input from client terminal"""
+        sid = request.sid  # type: ignore
+        if sid in active_sessions:
+            fd = active_sessions[sid]['fd']
+            try:
+                os.write(fd, data['input'].encode())
+            except OSError:
+                pass
 
-@socketio.on('disconnect')
-def handle_disconnect():
-    """Clean up terminal session on disconnect"""
-    sid = request.sid  # type: ignore
-    if sid in active_sessions:
-        try:
-            os.close(active_sessions[sid]['fd'])
-            os.kill(active_sessions[sid]['pid'], 9)
-        except:
-            pass
-        del active_sessions[sid]
+    @socketio.on('terminal_resize')
+    def handle_terminal_resize(data):
+        """Handle terminal resize"""
+        sid = request.sid  # type: ignore
+        if sid in active_sessions:
+            fd = active_sessions[sid]['fd']
+            set_winsize(fd, data['rows'], data['cols'])
+
+    @socketio.on('disconnect')
+    def handle_disconnect():
+        """Clean up terminal session on disconnect"""
+        sid = request.sid  # type: ignore
+        if sid in active_sessions:
+            try:
+                os.close(active_sessions[sid]['fd'])
+                os.kill(active_sessions[sid]['pid'], 9)
+            except:
+                pass
+            del active_sessions[sid]
 
 if __name__ == '__main__':
     # Ensure running on all interfaces for Replit
+    print(f"Starting HackingTool Web Application on {'Windows' if IS_WINDOWS else 'Linux/Unix'}")
+    if IS_WINDOWS:
+        print("Note: Interactive terminal features are disabled on Windows")
+        print("For full functionality, consider using WSL (Windows Subsystem for Linux)")
     socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True, use_reloader=True, log_output=True)  # type: ignore
