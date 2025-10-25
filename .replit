@@ -1,0 +1,47 @@
+modules = ["bash", "python-3.11"]
+[agent]
+expertMode = true
+
+[nix]
+channel = "stable-25_05"
+packages = ["aircrack-ng", "android-tools", "apktool", "autopsy", "binwalk", "boxes", "chkrootkit", "curl", "exiftool", "figlet", "foremost", "hashcat", "hydra", "john", "libimobiledevice", "lynis", "metasploit", "nikto", "nmap", "php", "scalpel", "scrcpy", "sleuthkit", "sqlmap", "steghide", "testdisk", "wget", "wireshark", "xdotool", "yakut"]
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "HackingTool Web App"
+
+[[workflows.workflow]]
+name = "HackingTool Web App"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python3 app.py"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[[ports]]
+localPort = 38627
+externalPort = 3002
+
+[[ports]]
+localPort = 42439
+externalPort = 3001
+
+[[ports]]
+localPort = 43783
+externalPort = 3000

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HackingTool - Web Interface</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- xterm.js for terminal emulation -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>🔐 HackingTool</h1>
+            <p class="subtitle">All-in-One Cybersecurity Tools Collection</p>
+            <div class="warning">⚠️ Educational/Professional Use Only - Always get proper authorization</div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="🔍 Search tools..." onkeyup="searchTools()">
+        </div>
+
+        <div class="categories">
+            {% for category in categories %}
+            <div class="category-card">
+                <div class="category-header" onclick="toggleCategory({{ loop.index0 }})">
+                    <h2>{{ category.title }}</h2>
+                    <span class="toggle-icon">▼</span>
+                </div>
+                <div class="category-content" id="category-{{ loop.index0 }}">
+                    {% if category.description %}
+                    <p class="category-desc">{{ category.description }}</p>
+                    {% endif %}
+                    
+                    <div class="tools-grid">
+                        {% set category_idx = loop.index0 %}
+                        {% for tool in category.tools %}
+                        <div class="tool-card" data-tool-name="{{ tool.title|lower }}">
+                            <h3>{{ tool.title }}</h3>
+                            <p class="tool-desc">{{ tool.description[:100] }}{% if tool.description|length > 100 %}...{% endif %}</p>
+                            
+                            <div class="tool-actions">
+                                {% if tool.has_install %}
+                                <button class="btn btn-install" onclick="installTool({{ category_idx }}, {{ loop.index0 }}, '{{ tool.title|replace("'", "\\'") }}')">
+                                    📥 Install
+                                </button>
+                                {% endif %}
+                                
+                                {% if tool.has_run %}
+                                <button class="btn btn-run" onclick="runToolInteractive({{ category_idx }}, {{ loop.index0 }}, '{{ tool.title|replace("'", "\\'") }}')">
+                                    ▶️ Run
+                                </button>
+                                {% endif %}
+                                
+                                {% if tool.project_url %}
+                                <button class="btn btn-info" onclick="window.open('{{ tool.project_url }}', '_blank')">
+                                    ℹ️ Info
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Output Modal -->
+    <div id="outputModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h2 id="modalTitle">Output</h2>
+            <div id="modalStatus" class="status-message"></div>
+            <pre id="modalOutput" class="output-box"></pre>
+        </div>
+    </div>
+
+    <!-- Terminal Modal -->
+    <div id="terminalModal" class="modal">
+        <div class="modal-content terminal-modal">
+            <div class="terminal-header">
+                <h2 id="terminalTitle">Interactive Terminal</h2>
+                <span class="close" onclick="closeTerminal()">&times;</span>
+            </div>
+            <div id="terminal" class="terminal-container"></div>
+            <div class="terminal-info">
+                💡 Tip: This is a fully interactive terminal. Type commands and press Enter.
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loadingSpinner" class="spinner-overlay">
+        <div class="spinner"></div>
+        <p>Processing...</p>
+    </div>
+
+    <!-- Socket.IO -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <!-- xterm.js -->
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+    <!-- Main application -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

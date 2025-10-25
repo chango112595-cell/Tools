@@ -1,0 +1,7 @@
+boxes
+flask
+lolcat
+requests
+androguard
+flask-socketio
+volatility3
